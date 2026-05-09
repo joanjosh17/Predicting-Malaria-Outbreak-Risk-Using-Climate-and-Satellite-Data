@@ -1,0 +1,289 @@
+# Predicting Malaria Outbreak Risk Using Climate and Satellite Data
+
+```python
+# ==========================================================
+# PROJECT: Predicting Malaria Outbreak Risk
+# Using Climate and Satellite Data (Synthetic Data)
+# ==========================================================
+
+# =========================
+# 1. IMPORT LIBRARIES
+# =========================
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import geopandas as gpd
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+)
+
+import warnings
+warnings.filterwarnings('ignore')
+
+np.random.seed(42)
+
+# =========================
+# 2. GENERATE SYNTHETIC DATA
+# =========================
+n_samples = 10000
+
+regions = [
+    'Lagos', 'Kano', 'Kaduna', 'Oyo', 'Rivers',
+    'Enugu', 'Benue', 'Cross River', 'Kebbi', 'Borno'
+]
+
+months = list(range(1, 13))
+
+region = np.random.choice(regions, n_samples)
+month = np.random.choice(months, n_samples)
+
+latitude = np.random.uniform(4, 14, n_samples)
+longitude = np.random.uniform(3, 15, n_samples)
+
+temperature = np.random.normal(29, 4, n_samples)
+rainfall = np.random.gamma(5, 30, n_samples)
+humidity = np.random.uniform(50, 95, n_samples)
+soil_moisture = np.random.uniform(0.2, 1.0, n_samples)
+
+# Satellite Features
+ndvi = np.random.uniform(0.1, 0.9, n_samples)
+land_surface_temp = temperature + np.random.normal(2, 2, n_samples)
+elevation = np.random.uniform(20, 1200, n_samples)
+distance_to_water = np.random.uniform(0.5, 50, n_samples)
+flood_risk = np.random.uniform(0, 1, n_samples)
+
+# Create realistic malaria outbreak pattern
+risk_score = (
+    rainfall * 0.03 +
+    humidity * 0.04 +
+    soil_moisture * 10 +
+    ndvi * 12 +
+    flood_risk * 10 -
+    elevation * 0.003 -
+    distance_to_water * 0.2 +
+    temperature * 0.3
+)
+
+malaria_cases = np.maximum(
+    0,
+    np.random.poisson(risk_score * 2)
+)
+
+# Risk label
+risk_label = []
+for case in malaria_cases:
+    if case < 35:
+        risk_label.append('Low')
+    elif case < 75:
+        risk_label.append('Moderate')
+    else:
+        risk_label.append('High')
+
+# Create dataframe
+df = pd.DataFrame({
+    'region': region,
+    'month': month,
+    'latitude': latitude,
+    'longitude': longitude,
+    'temperature': temperature,
+    'rainfall': rainfall,
+    'humidity': humidity,
+    'soil_moisture': soil_moisture,
+    'ndvi_index': ndvi,
+    'land_surface_temp': land_surface_temp,
+    'elevation': elevation,
+    'distance_to_water': distance_to_water,
+    'flood_risk': flood_risk,
+    'malaria_cases': malaria_cases,
+    'outbreak_risk': risk_label
+})
+
+print(df.head())
+print(df.shape)
+
+# =========================
+# 3. SAVE DATASET
+# =========================
+df.to_csv('synthetic_malaria_dataset.csv', index=False)
+print('Dataset saved successfully!')
+
+# =========================
+# 4. EXPLORATORY DATA ANALYSIS
+# =========================
+print(df.describe())
+print(df['outbreak_risk'].value_counts())
+
+plt.figure(figsize=(10, 5))
+sns.countplot(data=df, x='outbreak_risk')
+plt.title('Distribution of Malaria Outbreak Risk')
+plt.show()
+
+plt.figure(figsize=(10, 5))
+sns.histplot(df['malaria_cases'], bins=40)
+plt.title('Distribution of Malaria Cases')
+plt.show()
+
+plt.figure(figsize=(12, 8))
+correlation = df.select_dtypes(include=np.number).corr()
+sns.heatmap(correlation, annot=True, cmap='coolwarm')
+plt.title('Correlation Heatmap')
+plt.show()
+
+# =========================
+# 5. FEATURE ENGINEERING
+# =========================
+encoder = LabelEncoder()
+df['region_encoded'] = encoder.fit_transform(df['region'])
+df['risk_encoded'] = encoder.fit_transform(df['outbreak_risk'])
+
+features = [
+    'month',
+    'temperature',
+    'rainfall',
+    'humidity',
+    'soil_moisture',
+    'ndvi_index',
+    'land_surface_temp',
+    'elevation',
+    'distance_to_water',
+    'flood_risk',
+    'region_encoded'
+]
+
+X = df[features]
+y = df['outbreak_risk']
+
+# =========================
+# 6. TRAIN TEST SPLIT
+# =========================
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+print(X_train.shape, X_test.shape)
+
+# =========================
+# 7. MODEL TRAINING
+# =========================
+model = RandomForestClassifier(
+    n_estimators=200,
+    max_depth=10,
+    random_state=42
+)
+
+model.fit(X_train, y_train)
+
+# =========================
+# 8. MODEL EVALUATION
+# =========================
+y_pred = model.predict(X_test)
+
+accuracy = accuracy_score(y_test, y_pred)
+print(f'Accuracy: {accuracy:.2f}')
+
+print(classification_report(y_test, y_pred))
+
+cm = confusion_matrix(y_test, y_pred)
+
+plt.figure(figsize=(8, 5))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+plt.title('Confusion Matrix')
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.show()
+
+# =========================
+# 9. FEATURE IMPORTANCE
+# =========================
+importance = pd.DataFrame({
+    'Feature': features,
+    'Importance': model.feature_importances_
+})
+
+importance = importance.sort_values(
+    by='Importance',
+    ascending=False
+)
+
+print(importance)
+
+plt.figure(figsize=(10, 6))
+sns.barplot(
+    data=importance,
+    x='Importance',
+    y='Feature'
+)
+plt.title('Feature Importance')
+plt.show()
+
+# =========================
+# 10. MALARIA RISK PREDICTION
+# =========================
+sample_input = pd.DataFrame({
+    'month': [8],
+    'temperature': [31],
+    'rainfall': [180],
+    'humidity': [88],
+    'soil_moisture': [0.80],
+    'ndvi_index': [0.75],
+    'land_surface_temp': [34],
+    'elevation': [100],
+    'distance_to_water': [3],
+    'flood_risk': [0.82],
+    'region_encoded': [3]
+})
+
+prediction = model.predict(sample_input)
+print('Predicted Outbreak Risk:', prediction[0])
+
+# =========================
+# 11. GIS-STYLE RISK MAP
+# =========================
+plt.figure(figsize=(12, 8))
+scatter = plt.scatter(
+    df['longitude'],
+    df['latitude'],
+    c=df['malaria_cases'],
+    alpha=0.6
+)
+
+plt.colorbar(scatter)
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+plt.title('Geospatial Malaria Risk Distribution')
+plt.show()
+
+# =========================
+# 12. MONTHLY OUTBREAK TREND
+# =========================
+monthly_cases = df.groupby('month')['malaria_cases'].mean()
+
+plt.figure(figsize=(10, 5))
+monthly_cases.plot(marker='o')
+plt.title('Monthly Average Malaria Cases')
+plt.xlabel('Month')
+plt.ylabel('Average Cases')
+plt.grid(True)
+plt.show()
+
+# =========================
+# 13. PUBLIC HEALTH INSIGHTS
+# =========================
+print('PUBLIC HEALTH INSIGHTS')
+print('- High rainfall and humidity increase malaria risk.')
+print('- Areas close to water bodies show higher outbreak risk.')
+print('- Vegetation density (NDVI) influences mosquito habitat.')
+print('- Flood-prone areas experience elevated transmission risk.')
+print('- Predictive models can support early outbreak intervention.')
+```
